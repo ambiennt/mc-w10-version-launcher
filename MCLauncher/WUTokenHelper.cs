@@ -6,27 +6,28 @@ namespace MCLauncher {
     class WUTokenHelper {
 
         public static string GetWUToken() {
-            try {
-                string token;
-                int status = GetWUToken(out token);
-                if (status >= WU_ERRORS_START && status <= WU_ERRORS_END)
-                    throw new WUTokenException(status);
-                else if (status != 0)
-                    Marshal.ThrowExceptionForHR(status);
-                return token;
-            } catch (SEHException e) {
-                Marshal.ThrowExceptionForHR(e.HResult);
-                return ""; //ghey
+            string token;
+            int status = GetWUToken(out token);
+
+            if (status >= WU_ERRORS_START && status < WU_ERRORS_END)
+            {
+                throw new WUTokenException(status);
             }
+
+            if (status != 0)
+            {
+                Marshal.ThrowExceptionForHR(status);
+            }
+
+            return token;
         }
 
-        private const int WU_ERRORS_START = unchecked((int) 0x80040200);
-        private const int WU_NO_ACCOUNT = unchecked((int) 0x80040200);
+        private const int WU_NO_ACCOUNT = unchecked((int)0x80040200);
+        private const int WU_TOKEN_FETCH_ERROR_BASE = unchecked((int)0x80040300);
+        private const int WU_TOKEN_FETCH_ERROR_END = unchecked((int)0x80040400);
 
-        private const int WU_TOKEN_FETCH_ERROR_BASE = unchecked((int) 0x80040300);
-        private const int WU_TOKEN_FETCH_ERROR_END = unchecked((int) 0x80040400);
-
-        private const int WU_ERRORS_END = unchecked((int) 0x80040400);
+        private const int WU_ERRORS_START = WU_NO_ACCOUNT;
+        private const int WU_ERRORS_END = WU_TOKEN_FETCH_ERROR_END;
 
         [DllImport("WUTokenHelper.dll", CallingConvention = CallingConvention.StdCall)]
         private static extern int GetWUToken([MarshalAs(UnmanagedType.LPWStr)] out string token);
@@ -38,13 +39,15 @@ namespace MCLauncher {
             private static String GetExceptionText(int e) {
                 if (e >= WU_TOKEN_FETCH_ERROR_BASE && e < WU_TOKEN_FETCH_ERROR_END)
                 {
-                    var actualCode = (byte) e & 0xff;
+                    var actualCode = e & 0xff;
 
-                    if(!Enum.IsDefined(typeof(WebTokenRequestStatus), e))
+                    if (!Enum.IsDefined(typeof(WebTokenRequestStatus), actualCode))
                     {
-                        return $"WUTokenHelper returned bogus HRESULT: {e} (THIS IS A BUG)";
+                        return $"WUTokenHelper returned bogus HRESULT: 0x{e:X8} (THIS IS A BUG)";
                     }
-                    var status = (WebTokenRequestStatus) Enum.ToObject(typeof(WebTokenRequestStatus), actualCode);
+
+                    var status = (WebTokenRequestStatus)actualCode;
+
                     switch (status)
                     {
                         case WebTokenRequestStatus.Success:
@@ -59,11 +62,16 @@ namespace MCLauncher {
                             return "Xbox Live account services are currently unavailable";
                         case WebTokenRequestStatus.ProviderError:
                             return "Unknown Xbox Live error";
+                        default:
+                            return $"Unknown token request status: {status}";
                     }
                 }
-                switch (e) {
-                    case WU_NO_ACCOUNT: return "No Microsoft account found";
-                    default: return "Unknown " + e;
+                switch (e)
+                {
+                    case WU_NO_ACCOUNT:
+                        return "No Microsoft account found";
+                    default:
+                        return $"Unknown 0x{e:X8}";
                 }
             }
         }
